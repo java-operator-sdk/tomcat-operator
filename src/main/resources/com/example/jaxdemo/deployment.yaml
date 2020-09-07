@@ -5,15 +5,32 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: ""
+      app: "tomcat"
   replicas: 1
   template:
     metadata:
       labels:
-        app: ""
+        app: "tomcat"
     spec:
       containers:
         - name: tomcat
-          image: tomcat:jdk11-openjdk-slim
+          image: tomcat:8.0
           ports:
-            - containerPort: 80
+            - containerPort: 8080
+          volumeMounts:
+            - mountPath: /usr/local/tomcat/webapps
+              name: tomcat-volume
+      initContainers:
+        - name: init-tomcat
+          image: busybox:1.28
+          command:
+            - wget
+            - "-O"
+            - "/data/sample.war"
+            - http://tomcat.apache.org/tomcat-7.0-doc/appdev/sample/sample.war
+          volumeMounts:
+            - name: tomcat-volume
+              mountPath: /data
+      volumes:
+        - name: tomcat-volume
+          emptydir: {}

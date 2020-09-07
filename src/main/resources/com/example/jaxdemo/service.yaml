@@ -4,9 +4,10 @@ metadata:
   name: ""
 spec:
   selector:
-    app: ""
+    app: "tomcat"
   ports:
     - protocol: TCP
-      port: 80
-      targetPort: 80
+      port: 8080
+      targetPort: 8080
+      nodePort: 30000
   type: NodePort
