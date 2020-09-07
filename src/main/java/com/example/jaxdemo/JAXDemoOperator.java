@@ -19,7 +19,7 @@ public class JAXDemoOperator {
     private static final Logger log = LoggerFactory.getLogger(JAXDemoOperator.class);
 
     public static void main(String[] args) throws IOException {
-        log.info("Hello JAX");
+
         Config config = new ConfigBuilder().withNamespace(null).build();
         KubernetesClient client = new DefaultKubernetesClient(config);
         Operator operator = new Operator(client);
