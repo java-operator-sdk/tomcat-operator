@@ -20,10 +20,10 @@ spec:
             spec:
               type: object
               properties:
-                name:
-                  type: string
                 war:
                   type: string
+                version:
+                  type: integer
                 replicas:
                   type: integer
           required: [spec]

@@ -2,17 +2,9 @@ package com.example.jaxdemo;
 
 public class TomcatSpec {
 
-    private String name;
     private String war;
+    private Integer version;
     private Integer replicas;
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
 
     public String getWar() {
         return war;
@@ -20,6 +12,12 @@ public class TomcatSpec {
 
     public void setWar(String war) {
         this.war = war;
+    }
+
+    public Integer getVersion() { return version; }
+
+    public void setVersion(Integer version) {
+        this.version = version;
     }
 
     public Integer getReplicas() { return replicas; }

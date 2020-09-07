@@ -35,8 +35,8 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     @Override
     public UpdateControl<Tomcat> createOrUpdateResource(Tomcat tomcat, Context<Tomcat> context) {
-        createDeployment(tomcat);
-        createService(tomcat);
+        createOrUpdateDeployment(tomcat);
+        createOrUpdateService(tomcat);
 
         return UpdateControl.updateCustomResource(tomcat);
     }
@@ -47,14 +47,18 @@ public class TomcatController implements ResourceController<Tomcat> {
         deleteService(tomcat);
         return true;
     }
-    private void createDeployment (Tomcat tomcat) {
+
+    private void createOrUpdateDeployment (Tomcat tomcat) {
         Deployment deployment = loadYaml(Deployment.class, "deployment.yaml");
         deployment.getMetadata().setName(tomcat.getMetadata().getName());
         String ns = tomcat.getMetadata().getNamespace();
         deployment.getMetadata().setNamespace(ns);
+        // set tomcat version
+        deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:"+tomcat.getSpec().getVersion());
+        // set war
+        deployment.getSpec().getTemplate().getSpec().getInitContainers().get(0)
+                .setCommand(Arrays.asList("wget", "-O", "/data/ROOT.war", tomcat.getSpec().getWar()));
         deployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
-        deployment.getSpec().getSelector().getMatchLabels().put("app", tomcat.getMetadata().getName());
-        deployment.getSpec().getTemplate().getMetadata().getLabels().put("app", tomcat.getMetadata().getName());
         log.info("Creating or updating Deployment {} in {}", deployment.getMetadata().getName(), ns);
         kubernetesClient.apps().deployments().inNamespace(ns).createOrReplace(deployment);
     }
@@ -69,27 +73,7 @@ public class TomcatController implements ResourceController<Tomcat> {
         }
     }
 
-    private void createPod (Tomcat tomcat) {
-        Pod pod = loadYaml(Pod.class, "pod.yaml");
-        pod.getMetadata().setName(tomcat.getMetadata().getName());
-        String ns = tomcat.getMetadata().getNamespace();
-        pod.getMetadata().setNamespace(ns);
-        pod.getMetadata().getLabels().put("app", tomcat.getMetadata().getName());
-        log.info("Creating or updating Pod {} in {}", pod.getMetadata().getName(), ns);
-        kubernetesClient.pods().inNamespace(ns).createOrReplace(pod);
-    }
-
-    private void deletePod (Tomcat tomcat) {
-        log.info("Deleting Pod {}", tomcat.getMetadata().getName());
-        PodResource<Pod, DoneablePod> pod = kubernetesClient.pods()
-                .inNamespace(tomcat.getMetadata().getNamespace())
-                .withName(tomcat.getMetadata().getName());
-        if (pod.get() != null) {
-            pod.delete();
-        }
-    }
-
-    private void createService (Tomcat tomcat) {
+    private void createOrUpdateService (Tomcat tomcat) {
         Service service = loadYaml(Service.class, "service.yaml");
         service.getMetadata().setName(tomcat.getMetadata().getName());
         String ns = tomcat.getMetadata().getNamespace();

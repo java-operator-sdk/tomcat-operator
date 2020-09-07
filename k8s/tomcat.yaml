@@ -3,6 +3,6 @@ kind: Tomcat
 metadata:
   name: hi-jax
 spec:
-  name: demo-app
-  war: test.war
+  war: charlottemach.com/assets/jax.war
+  version: 9.0
   replicas: 2
