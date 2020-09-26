@@ -20,7 +20,8 @@ import java.io.InputStream;
 import java.util.Arrays;
 
 @Controller(customResourceClass = Tomcat.class,
-        crdName = "tomcats.demo.example.com")
+        crdName = "tomcats.demo.example.com",
+customResourceDoneableClass = TomcatDoneable.class)
 public class TomcatController implements ResourceController<Tomcat> {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
