@@ -5,24 +5,28 @@ import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.ConfigBuilder;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.quarkus.runtime.StartupEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import javax.enterprise.context.ApplicationScoped;
-import javax.enterprise.event.Observes;
+import org.takes.facets.fork.FkRegex;
+import org.takes.facets.fork.TkFork;
+import org.takes.http.Exit;
+import org.takes.http.FtBasic;
 
-@ApplicationScoped
+import java.io.IOException;
+
 public class JAXDemoOperator {
 
     private static final Logger log = LoggerFactory.getLogger(JAXDemoOperator.class);
 
-    void onStart(@Observes StartupEvent ev) {
+    public static void main(String[] args) throws IOException {
 
         Config config = new ConfigBuilder().withNamespace(null).build();
         KubernetesClient client = new DefaultKubernetesClient(config);
         Operator operator = new Operator(client);
         operator.registerControllerForAllNamespaces(new TomcatController(client));
 
+        new FtBasic(
+        new TkFork(new FkRegex("/health", "ALL GOOD.")), 8080
+        ).start(Exit.NEVER);
     }
-
 }
