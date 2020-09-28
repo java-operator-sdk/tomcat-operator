@@ -5,6 +5,7 @@ import com.github.containersolutions.operator.api.Controller;
 import com.github.containersolutions.operator.api.ResourceController;
 import com.github.containersolutions.operator.api.UpdateControl;
 import io.fabric8.kubernetes.api.model.DoneableService;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DoneableDeployment;
@@ -15,11 +16,13 @@ import io.fabric8.kubernetes.client.Watcher;
 import io.fabric8.kubernetes.client.dsl.RollableScalableResource;
 import io.fabric8.kubernetes.client.dsl.ServiceResource;
 import io.fabric8.kubernetes.client.utils.Serialization;
+import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -31,59 +34,51 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     private final KubernetesClient kubernetesClient;
 
+    private final List<Object> watchedResources = new ArrayList<>();
+
     public TomcatController(KubernetesClient client) {
         this.kubernetesClient = client;
     }
 
-//    @Override
-//    public void init(Context<Tomcat> context) {
-//        for (Tomcat tomcat : context.customResourceClient().inAnyNamespace().list().getItems()) {
-//            List<Deployment> deployments = context.kubernetesClient().apps().deployments().withLabel("created-by", tomcat.getMetadata().getName()).list().getItems();
-//            if (deployments.size() > 0) {
-//                Deployment deployment = deployments.get(0);
-//                updateTomcatStatus(context, tomcat, deployment);
-//
-//                log.info("Attaching Watch to Deployment {}", deployment.getMetadata().getName());
-//                context.kubernetesClient().apps().deployments().withName(deployment.getMetadata().getName()).watch(new Watcher<Deployment>() {
-//                    @Override
-//                    public void eventReceived(Action action, Deployment depl) {
-//                        if (action == Action.MODIFIED) {
-//                            updateTomcatStatus(context, tomcat, deployment);
-//                        }
-//                    }
-//
-//                    @Override
-//                    public void onClose(KubernetesClientException cause) {
-//                    }
-//                });
-//            } else {
-//                createOrUpdateDeployment(tomcat);
-//                createOrUpdateService(tomcat);
-//            }
-//        }
-//    }
-
     private void updateTomcatStatus(Context<Tomcat> context, Tomcat tomcat, Deployment deployment) {
-        tomcat.getStatus().setReadyReplicas(deployment.getStatus().getReadyReplicas());
-        log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(), tomcat.getMetadata().getNamespace(), deployment.getStatus().getReadyReplicas());
-//        context.customResourceClient()
-//                .inNamespace(tomcat.getMetadata().getNamespace())
-//                .withName(tomcat.getMetadata().getName())
-//                .updateStatus(tomcat);
+        int readyReplicas = Objects.requireNonNullElse(deployment.getStatus().getReadyReplicas(), 0);
+        log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
+                tomcat.getMetadata().getNamespace(), readyReplicas);
+        tomcat.getStatus().setReadyReplicas(readyReplicas);
+        context.customResourceClient()
+                .inNamespace(tomcat.getMetadata().getNamespace())
+                .withName(tomcat.getMetadata().getName())
+                .replace(tomcat);
     }
 
     @Override
     public UpdateControl<Tomcat> createOrUpdateResource(Tomcat tomcat, Context<Tomcat> context) {
-        createOrUpdateDeployment(tomcat);
+        Deployment deployment = createOrUpdateDeployment(tomcat);
         createOrUpdateService(tomcat);
 
-        List<Deployment> deployments = context.kubernetesClient().apps().deployments().withLabel("created-by", tomcat.getMetadata().getName()).list().getItems();
-        if (deployments.size() > 0) {
-            Deployment deployment = deployments.get(0);
-            updateTomcatStatus(context, tomcat, deployment);
+        if (!watchedResources.contains(WatchedResource.fromResource(deployment))) {
+            log.info("Attaching Watch to Deployment {}", deployment.getMetadata().getName());
+            context.kubernetesClient().apps().deployments().withName(deployment.getMetadata().getName()).watch(new Watcher<Deployment>() {
+                @Override
+                public void eventReceived(Action action, Deployment deployment) {
+                    try {
+                        Tomcat tomcat = context.customResourceClient().inNamespace(deployment.getMetadata().getNamespace())
+                                .withName(deployment.getMetadata().getLabels().get("created-by")).get();
+                        updateTomcatStatus(context, tomcat, deployment);
+                    } catch (Exception ex) {
+                        log.error(ex.getMessage());
+                    }
+                }
+
+                @Override
+                public void onClose(KubernetesClientException cause) {
+                }
+            });
+            watchedResources.add(WatchedResource.fromResource(deployment));
         }
 
-        return UpdateControl.updateCustomResource(tomcat);
+
+        return UpdateControl.noUpdate();
     }
 
     @Override
@@ -93,17 +88,26 @@ public class TomcatController implements ResourceController<Tomcat> {
         return true;
     }
 
-    private void createOrUpdateDeployment(Tomcat tomcat) {
-        Deployment deployment = loadYaml(Deployment.class, "deployment.yaml");
-        deployment.getMetadata().setName(tomcat.getMetadata().getName());
+    private Deployment createOrUpdateDeployment(Tomcat tomcat) {
         String ns = tomcat.getMetadata().getNamespace();
-        deployment.getMetadata().setNamespace(ns);
-        deployment.getMetadata().getLabels().put("created-by", tomcat.getMetadata().getName());
-        // set tomcat version
-        deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
-        deployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
-        log.info("Creating or updating Deployment {} in {}", deployment.getMetadata().getName(), ns);
-        kubernetesClient.apps().deployments().inNamespace(ns).createOrReplace(deployment);
+        Deployment existingDeployment = kubernetesClient.apps().deployments()
+                .inNamespace(ns).withName(tomcat.getMetadata().getName())
+                .get();
+        if (existingDeployment == null) {
+            Deployment deployment = loadYaml(Deployment.class, "deployment.yaml");
+            deployment.getMetadata().setName(tomcat.getMetadata().getName());
+            deployment.getMetadata().setNamespace(ns);
+            deployment.getMetadata().getLabels().put("created-by", tomcat.getMetadata().getName());
+            // set tomcat version
+            deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
+            deployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
+            log.info("Creating or updating Deployment {} in {}", deployment.getMetadata().getName(), ns);
+            return kubernetesClient.apps().deployments().inNamespace(ns).create(deployment);
+        } else {
+            existingDeployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
+            existingDeployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
+            return kubernetesClient.apps().deployments().inNamespace(ns).createOrReplace(existingDeployment);
+        }
     }
 
     private void deleteDeployment(Tomcat tomcat) {
@@ -140,6 +144,47 @@ public class TomcatController implements ResourceController<Tomcat> {
             return Serialization.unmarshal(is, clazz);
         } catch (IOException ex) {
             throw new IllegalStateException("Cannot find yaml on classpath: " + yaml);
+        }
+    }
+
+    private static class WatchedResource {
+        private final String type;
+        private final String name;
+
+        public WatchedResource(String type, String name) {
+            this.type = type;
+            this.name = name;
+        }
+
+        public static WatchedResource fromResource(HasMetadata resource) {
+            return new WatchedResource(resource.getKind(), resource.getMetadata().getName());
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+
+            if (o == null || getClass() != o.getClass()) return false;
+
+            WatchedResource that = (WatchedResource) o;
+
+            return new EqualsBuilder()
+                    .append(type, that.type)
+                    .append(name, that.name)
+                    .isEquals();
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, name);
+        }
+
+        @Override
+        public String toString() {
+            return "WatchedResource{" +
+                    "type='" + type + '\'' +
+                    ", name='" + name + '\'' +
+                    '}';
         }
     }
 }

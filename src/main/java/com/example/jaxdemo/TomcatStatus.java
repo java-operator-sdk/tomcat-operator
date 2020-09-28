@@ -2,7 +2,7 @@ package com.example.jaxdemo;
 
 public class TomcatStatus {
 
-    private Integer readyReplicas;
+    private Integer readyReplicas = 0;
 
     public Integer getReadyReplicas() {
         return readyReplicas;
