@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ""
+  labels:
+    created-by: ""
 spec:
   selector:
     matchLabels:
@@ -19,18 +21,13 @@ spec:
             - containerPort: 8080
           volumeMounts:
             - mountPath: /usr/local/tomcat/webapps
-              name: tomcat-volume
-      initContainers:
-        - name: init-tomcat
+              name: webapps-volume
+        - name: war-downloader
           image: busybox:1.28
-          command:
-            - wget
-            - "-O"
-            - "/data/sample.war"
-            - http://tomcat.apache.org/tomcat-7.0-doc/appdev/sample/sample.war
+          command: ['tail', '-f', '/dev/null']
           volumeMounts:
-            - name: tomcat-volume
+            - name: webapps-volume
               mountPath: /data
       volumes:
-        - name: tomcat-volume
+        - name: webapps-volume
           emptydir: {}

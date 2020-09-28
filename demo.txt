@@ -1,0 +1,5 @@
+Create Tomcat without operator:
+    kubectl apply -f .\k8s\tomcat-deployment.yaml
+
+
+

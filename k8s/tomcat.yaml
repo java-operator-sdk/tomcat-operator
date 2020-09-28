@@ -1,8 +1,7 @@
-apiVersion: "demo.example.com/v1"
+apiVersion: "tomcatoperator.io/v1"
 kind: Tomcat
 metadata:
-  name: hi-jax
+  name: test-tomcat1
 spec:
-  war: charlottemach.com/assets/jax.war
   version: 9.0
   replicas: 2

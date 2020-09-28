@@ -9,6 +9,9 @@ public class Tomcat extends CustomResource {
     private TomcatStatus status;
 
     public TomcatSpec getSpec() {
+        if (spec == null) {
+            spec = new TomcatSpec();
+        }
         return spec;
     }
 
@@ -17,6 +20,9 @@ public class Tomcat extends CustomResource {
     }
 
     public TomcatStatus getStatus() {
+        if (status == null) {
+            status = new TomcatStatus();
+        }
         return status;
     }
 
