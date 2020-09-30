@@ -17,6 +17,9 @@ public class Webapp extends CustomResource {
     }
 
     public WebappStatus getStatus() {
+        if (status == null) {
+            status = new WebappStatus();
+        }
         return status;
     }
 

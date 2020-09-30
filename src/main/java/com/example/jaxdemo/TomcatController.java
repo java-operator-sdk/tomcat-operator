@@ -11,7 +11,6 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DoneableDeployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
-import io.fabric8.kubernetes.client.Watch;
 import io.fabric8.kubernetes.client.Watcher;
 import io.fabric8.kubernetes.client.dsl.RollableScalableResource;
 import io.fabric8.kubernetes.client.dsl.ServiceResource;
@@ -44,7 +43,7 @@ public class TomcatController implements ResourceController<Tomcat> {
         int readyReplicas = Objects.requireNonNullElse(deployment.getStatus().getReadyReplicas(), 0);
         log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
                 tomcat.getMetadata().getNamespace(), readyReplicas);
-        tomcat.getStatus().setReadyReplicas(readyReplicas);
+
         context.customResourceClient()
                 .inNamespace(tomcat.getMetadata().getNamespace())
                 .withName(tomcat.getMetadata().getName())
@@ -58,7 +57,7 @@ public class TomcatController implements ResourceController<Tomcat> {
 
         if (!watchedResources.contains(WatchedResource.fromResource(deployment))) {
             log.info("Attaching Watch to Deployment {}", deployment.getMetadata().getName());
-            context.kubernetesClient().apps().deployments().withName(deployment.getMetadata().getName()).watch(new Watcher<Deployment>() {
+            kubernetesClient.apps().deployments().withName(deployment.getMetadata().getName()).watch(new Watcher<Deployment>() {
                 @Override
                 public void eventReceived(Action action, Deployment deployment) {
                     try {
