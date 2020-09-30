@@ -4,7 +4,7 @@ metadata:
   name: ""
 spec:
   selector:
-    app: tomcat
+    app: ""
   ports:
     - protocol: TCP
       port: 80

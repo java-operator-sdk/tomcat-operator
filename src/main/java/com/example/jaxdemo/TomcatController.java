@@ -102,6 +102,11 @@ public class TomcatController implements ResourceController<Tomcat> {
             // set tomcat version
             deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
             deployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
+
+            //make sure label selector matches label (which has to be matched by service selector too)
+            deployment.getSpec().getTemplate().getMetadata().getLabels().put("app", tomcat.getMetadata().getName());
+            deployment.getSpec().getSelector().getMatchLabels().put("app", tomcat.getMetadata().getName());
+
             log.info("Creating or updating Deployment {} in {}", deployment.getMetadata().getName(), ns);
             return kubernetesClient.apps().deployments().inNamespace(ns).create(deployment);
         } else {
@@ -126,6 +131,7 @@ public class TomcatController implements ResourceController<Tomcat> {
         service.getMetadata().setName(tomcat.getMetadata().getName());
         String ns = tomcat.getMetadata().getNamespace();
         service.getMetadata().setNamespace(ns);
+        service.getSpec().getSelector().put("app", tomcat.getMetadata().getName());
         log.info("Creating or updating Service {} in {}", service.getMetadata().getName(), ns);
         kubernetesClient.services().inNamespace(ns).createOrReplace(service);
     }

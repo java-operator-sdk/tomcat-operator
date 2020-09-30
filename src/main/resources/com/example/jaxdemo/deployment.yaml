@@ -7,12 +7,12 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: "tomcat"
+      app: ""
   replicas: 1
   template:
     metadata:
       labels:
-        app: "tomcat"
+        app: ""
     spec:
       containers:
         - name: tomcat

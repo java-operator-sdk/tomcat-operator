@@ -25,10 +25,11 @@ spec:
       labels:
         app: tomcat-operator
     spec:
-      serviceAccount: tomcat-operator
+      serviceAccountName: tomcat-operator
       containers:
       - name: operator
-        image: jax-demo:1.0-SNAPSHOT 
+        image: eu.gcr.io/adamsandor-test/tomcat-operator
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
         readinessProbe:
@@ -46,7 +47,7 @@ spec:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: operator-admin
+  name: tomcat-operator-admin
 subjects:
 - kind: ServiceAccount
   name: tomcat-operator
