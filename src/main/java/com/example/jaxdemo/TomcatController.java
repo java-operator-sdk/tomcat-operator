@@ -9,9 +9,9 @@ import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DoneableDeployment;
-import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClientException;
-import io.fabric8.kubernetes.client.Watcher;
+import io.fabric8.kubernetes.client.*;
+import io.fabric8.kubernetes.client.dsl.MixedOperation;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.RollableScalableResource;
 import io.fabric8.kubernetes.client.dsl.ServiceResource;
 import io.fabric8.kubernetes.client.utils.Serialization;
@@ -33,6 +33,8 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     private final KubernetesClient kubernetesClient;
 
+    private MixedOperation<Tomcat, CustomResourceList<Tomcat>, CustomResourceDoneable<Tomcat>, Resource<Tomcat, CustomResourceDoneable<Tomcat>>> tomcatOperations;
+
     private final List<Object> watchedResources = new ArrayList<>();
 
     public TomcatController(KubernetesClient client) {
@@ -44,7 +46,7 @@ public class TomcatController implements ResourceController<Tomcat> {
         log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
                 tomcat.getMetadata().getNamespace(), readyReplicas);
 
-        context.customResourceClient()
+        tomcatOperations
                 .inNamespace(tomcat.getMetadata().getNamespace())
                 .withName(tomcat.getMetadata().getName())
                 .replace(tomcat);
@@ -61,7 +63,7 @@ public class TomcatController implements ResourceController<Tomcat> {
                 @Override
                 public void eventReceived(Action action, Deployment deployment) {
                     try {
-                        Tomcat tomcat = context.customResourceClient().inNamespace(deployment.getMetadata().getNamespace())
+                        Tomcat tomcat = tomcatOperations.inNamespace(deployment.getMetadata().getNamespace())
                                 .withName(deployment.getMetadata().getLabels().get("created-by")).get();
                         updateTomcatStatus(context, tomcat, deployment);
                     } catch (Exception ex) {
@@ -144,6 +146,10 @@ public class TomcatController implements ResourceController<Tomcat> {
         } catch (IOException ex) {
             throw new IllegalStateException("Cannot find yaml on classpath: " + yaml);
         }
+    }
+
+    public void setTomcatOperations(MixedOperation<Tomcat, CustomResourceList<Tomcat>, CustomResourceDoneable<Tomcat>, Resource<Tomcat, CustomResourceDoneable<Tomcat>>> tomcatOperations) {
+        this.tomcatOperations = tomcatOperations;
     }
 
     private static class WatchedResource {

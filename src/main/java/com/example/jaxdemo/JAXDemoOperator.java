@@ -23,8 +23,13 @@ public class JAXDemoOperator {
         Config config = new ConfigBuilder().withNamespace(null).build();
         KubernetesClient client = new DefaultKubernetesClient(config);
         Operator operator = new Operator(client);
-        operator.registerControllerForAllNamespaces(new TomcatController(client));
+
+        TomcatController tomcatController = new TomcatController(client);
+        operator.registerControllerForAllNamespaces(tomcatController);
+        tomcatController.setTomcatOperations(operator.getCustomResourceClients(Tomcat.class));
+
         operator.registerControllerForAllNamespaces(new WebappController(client));
+
 
         new FtBasic(
         new TkFork(new FkRegex("/health", "ALL GOOD.")), 8080
