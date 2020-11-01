@@ -48,10 +48,14 @@ public class TomcatController implements ResourceController<Tomcat> {
         log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
                 tomcat.getMetadata().getNamespace(), readyReplicas);
 
+        TomcatStatus status = new TomcatStatus();
+        status.setReadyReplicas(readyReplicas);
+        tomcat.setStatus(status);
+
         tomcatOperations
                 .inNamespace(tomcat.getMetadata().getNamespace())
                 .withName(tomcat.getMetadata().getName())
-                .replace(tomcat);
+                .updateStatus(tomcat);
     }
 
     @Override
