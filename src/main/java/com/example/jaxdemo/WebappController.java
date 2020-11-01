@@ -72,10 +72,14 @@ public class WebappController implements ResourceController<Webapp> {
 
     private String fileNameFromWebapp(Webapp webapp) {
         try {
-            Pattern regexpPattern = Pattern.compile("([^\\/]+$)");
-            Matcher regexpMatcher = regexpPattern.matcher(webapp.getSpec().getUrl());
-            regexpMatcher.find();
-            return regexpMatcher.group();
+            if (webapp.getSpec().getContextPath() == null) {
+                Pattern regexpPattern = Pattern.compile("([^\\/]+$)");
+                Matcher regexpMatcher = regexpPattern.matcher(webapp.getSpec().getUrl());
+                regexpMatcher.find();
+                return regexpMatcher.group();
+            } else {
+                return webapp.getSpec().getContextPath() + ".war";
+            }
         } catch (RuntimeException ex) {
             log.error("Failed to parse file name from URL {}", webapp.getSpec().getUrl());
             throw ex;
