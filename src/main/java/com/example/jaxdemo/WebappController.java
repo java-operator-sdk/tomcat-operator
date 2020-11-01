@@ -17,7 +17,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Controller(customResourceClass = Webapp.class,
-        customResourceDoneableClass = WebappDoneable.class,
         crdName = "webapps.tomcatoperator.io")
 public class WebappController implements ResourceController<Webapp> {
 

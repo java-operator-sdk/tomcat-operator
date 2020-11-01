@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Objects;
 
 @Controller(customResourceClass = Tomcat.class,
-        customResourceDoneableClass = TomcatDoneable.class,
         crdName = "tomcats.tomcatoperator.io")
 public class TomcatController implements ResourceController<Tomcat> {
 
