@@ -8,6 +8,7 @@ import io.fabric8.kubernetes.api.model.DoneableService;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.api.model.apps.DoneableDeployment;
 import io.fabric8.kubernetes.client.*;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
@@ -43,7 +44,8 @@ public class TomcatController implements ResourceController<Tomcat> {
     }
 
     private void updateTomcatStatus(Context<Tomcat> context, Tomcat tomcat, Deployment deployment) {
-        int readyReplicas = Objects.requireNonNullElse(deployment.getStatus().getReadyReplicas(), 0);
+        DeploymentStatus deploymentStatus = Objects.requireNonNullElse(deployment.getStatus(), new DeploymentStatus());
+        int readyReplicas = Objects.requireNonNullElse(deploymentStatus.getReadyReplicas(), 0);
         log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
                 tomcat.getMetadata().getNamespace(), readyReplicas);
 
