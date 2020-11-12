@@ -18,8 +18,7 @@ public class TomcatOperator {
 
     void onStart(@Observes StartupEvent ev) {
 
-        Config config = new ConfigBuilder().withNamespace(null).build();
-        KubernetesClient client = new DefaultKubernetesClient(config);
+        KubernetesClient client = new DefaultKubernetesClient();
         Operator operator = new Operator(client);
 
         TomcatController tomcatController = new TomcatController(client);
