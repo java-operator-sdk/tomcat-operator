@@ -1,9 +1,6 @@
 package com.example.jaxdemo;
 
-import com.github.containersolutions.operator.api.Context;
-import com.github.containersolutions.operator.api.Controller;
-import com.github.containersolutions.operator.api.ResourceController;
-import com.github.containersolutions.operator.api.UpdateControl;
+import io.javaoperatorsdk.operator.api.*;
 import io.fabric8.kubernetes.api.model.DoneableService;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Service;
@@ -26,8 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-@Controller(customResourceClass = Tomcat.class,
-        crdName = "tomcats.tomcatoperator.io")
+@Controller(crdName = "tomcats.tomcatoperator.io")
 public class TomcatController implements ResourceController<Tomcat> {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -89,10 +85,10 @@ public class TomcatController implements ResourceController<Tomcat> {
     }
 
     @Override
-    public boolean deleteResource(Tomcat tomcat, Context<Tomcat> context) {
+    public DeleteControl deleteResource(Tomcat tomcat, Context<Tomcat> context) {
         deleteDeployment(tomcat);
         deleteService(tomcat);
-        return true;
+        return DeleteControl.DEFAULT_DELETE;
     }
 
     private Deployment createOrUpdateDeployment(Tomcat tomcat) {

@@ -18,7 +18,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.github.containersolutions</groupId>
+            <groupId>io.javaoperatorsdk</groupId>
             <artifactId>operator-framework</artifactId>
             <version>${java-operator-sdk.version}</version>
         </dependency>

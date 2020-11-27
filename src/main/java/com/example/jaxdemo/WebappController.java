@@ -1,12 +1,9 @@
 package com.example.jaxdemo;
 
-import com.github.containersolutions.operator.api.Context;
-import com.github.containersolutions.operator.api.Controller;
-import com.github.containersolutions.operator.api.ResourceController;
-import com.github.containersolutions.operator.api.UpdateControl;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,8 +13,7 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@Controller(customResourceClass = Webapp.class,
-        crdName = "webapps.tomcatoperator.io")
+@Controller(crdName = "webapps.tomcatoperator.io")
 public class WebappController implements ResourceController<Webapp> {
 
     private KubernetesClient kubernetesClient;
@@ -29,7 +25,7 @@ public class WebappController implements ResourceController<Webapp> {
     }
 
     @Override
-    public UpdateControl createOrUpdateResource(Webapp webapp, Context<Webapp> context) {
+    public UpdateControl<Webapp> createOrUpdateResource(Webapp webapp, Context<Webapp> context) {
         if (Objects.equals(webapp.getSpec().getUrl(), webapp.getStatus().getDeployedArtifact())) {
             return UpdateControl.noUpdate();
         }
@@ -44,11 +40,11 @@ public class WebappController implements ResourceController<Webapp> {
     }
 
     @Override
-    public boolean deleteResource(Webapp webapp, Context<Webapp> context) {
+    public DeleteControl deleteResource(Webapp webapp, Context<Webapp> context) {
         String fileName = fileNameFromWebapp(webapp);
         String[] command = new String[]{"rm", "/data/" + fileName};
         executeCommandInAllPods(kubernetesClient, webapp, command);
-        return true;
+        return DeleteControl.DEFAULT_DELETE;
     }
 
     private void executeCommandInAllPods(KubernetesClient kubernetesClient, Webapp webapp, String[] command) {
