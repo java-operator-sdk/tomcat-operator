@@ -1,4 +1,4 @@
-package com.example.jaxdemo;
+package io.javaoperatorsdk.tomcatoperator;
 
 public class TomcatSpec {
 

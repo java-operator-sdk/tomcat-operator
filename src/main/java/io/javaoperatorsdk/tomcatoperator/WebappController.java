@@ -1,4 +1,4 @@
-package com.example.jaxdemo;
+package io.javaoperatorsdk.tomcatoperator;
 
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.apps.Deployment;

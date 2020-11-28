@@ -1,4 +1,4 @@
-package com.example.jaxdemo;
+package io.javaoperatorsdk.tomcatoperator;
 
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.ConfigBuilder;

@@ -1,4 +1,4 @@
-package com.example.jaxdemo;
+package io.javaoperatorsdk.tomcatoperator;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import org.apache.commons.lang3.builder.EqualsBuilder;

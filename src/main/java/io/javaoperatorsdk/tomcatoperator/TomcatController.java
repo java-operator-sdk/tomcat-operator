@@ -1,4 +1,4 @@
-package com.example.jaxdemo;
+package io.javaoperatorsdk.tomcatoperator;
 
 import io.javaoperatorsdk.operator.api.*;
 import io.fabric8.kubernetes.api.model.DoneableService;
@@ -13,6 +13,10 @@ import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.RollableScalableResource;
 import io.fabric8.kubernetes.client.dsl.ServiceResource;
 import io.fabric8.kubernetes.client.utils.Serialization;
+import io.javaoperatorsdk.operator.processing.event.EventHandler;
+import io.javaoperatorsdk.operator.processing.event.EventSource;
+import io.javaoperatorsdk.operator.processing.event.EventSourceManager;
+import io.javaoperatorsdk.operator.processing.event.ExecutionDescriptor;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,8 +38,36 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     private final List<Object> watchedResources = new ArrayList<>();
 
+    private EventSource eventSource;
+
     public TomcatController(KubernetesClient client) {
         this.kubernetesClient = client;
+        eventSource = new EventSource() {
+            @Override
+            public void setEventHandler(EventHandler eventHandler) {
+
+            }
+
+            @Override
+            public void setEventSourceManager(EventSourceManager eventSourceManager) {
+
+            }
+
+            @Override
+            public void eventSourceRegisteredForResource(CustomResource customResource) {
+
+            }
+
+            @Override
+            public void eventSourceDeRegisteredForResource(String customResourceUid) {
+
+            }
+
+            @Override
+            public void controllerExecuted(ExecutionDescriptor executionDescriptor) {
+
+            }
+        }
     }
 
     private void updateTomcatStatus(Context<Tomcat> context, Tomcat tomcat, Deployment deployment) {
@@ -58,6 +90,9 @@ public class TomcatController implements ResourceController<Tomcat> {
     public UpdateControl<Tomcat> createOrUpdateResource(Tomcat tomcat, Context<Tomcat> context) {
         Deployment deployment = createOrUpdateDeployment(tomcat);
         createOrUpdateService(tomcat);
+
+        context.getEventSourceManager().registerEventSourceIfNotRegistered()
+        context.getEventSourceManager().registerEventSource(tomcat, "");
 
         if (!watchedResources.contains(WatchedResource.fromResource(deployment))) {
             log.info("Attaching Watch to Deployment {}", deployment.getMetadata().getName());
