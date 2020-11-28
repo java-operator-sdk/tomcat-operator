@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 @Controller(crdName = "tomcats.tomcatoperator.io")
 public class TomcatController implements ResourceController<Tomcat> {
@@ -36,38 +37,8 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     private MixedOperation<Tomcat, CustomResourceList<Tomcat>, CustomResourceDoneable<Tomcat>, Resource<Tomcat, CustomResourceDoneable<Tomcat>>> tomcatOperations;
 
-    private final List<Object> watchedResources = new ArrayList<>();
-
-    private EventSource eventSource;
-
     public TomcatController(KubernetesClient client) {
         this.kubernetesClient = client;
-        eventSource = new EventSource() {
-            @Override
-            public void setEventHandler(EventHandler eventHandler) {
-
-            }
-
-            @Override
-            public void setEventSourceManager(EventSourceManager eventSourceManager) {
-
-            }
-
-            @Override
-            public void eventSourceRegisteredForResource(CustomResource customResource) {
-
-            }
-
-            @Override
-            public void eventSourceDeRegisteredForResource(String customResourceUid) {
-
-            }
-
-            @Override
-            public void controllerExecuted(ExecutionDescriptor executionDescriptor) {
-
-            }
-        }
     }
 
     private void updateTomcatStatus(Context<Tomcat> context, Tomcat tomcat, Deployment deployment) {
@@ -88,33 +59,12 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     @Override
     public UpdateControl<Tomcat> createOrUpdateResource(Tomcat tomcat, Context<Tomcat> context) {
+        context.getEventSourceManager().registerEventSourceIfNotRegistered(tomcat, "deployment-event-source",
+                () -> DeploymentEventSource.createAndRegisterWatch(kubernetesClient));
+
         Deployment deployment = createOrUpdateDeployment(tomcat);
         createOrUpdateService(tomcat);
-
-        context.getEventSourceManager().registerEventSourceIfNotRegistered()
-        context.getEventSourceManager().registerEventSource(tomcat, "");
-
-        if (!watchedResources.contains(WatchedResource.fromResource(deployment))) {
-            log.info("Attaching Watch to Deployment {}", deployment.getMetadata().getName());
-            kubernetesClient.apps().deployments().withName(deployment.getMetadata().getName()).watch(new Watcher<Deployment>() {
-                @Override
-                public void eventReceived(Action action, Deployment deployment) {
-                    try {
-                        Tomcat tomcat = tomcatOperations.inNamespace(deployment.getMetadata().getNamespace())
-                                .withName(deployment.getMetadata().getLabels().get("created-by")).get();
-                        updateTomcatStatus(context, tomcat, deployment);
-                    } catch (Exception ex) {
-                        log.error(ex.getMessage());
-                    }
-                }
-
-                @Override
-                public void onClose(KubernetesClientException cause) {
-                }
-            });
-            watchedResources.add(WatchedResource.fromResource(deployment));
-        }
-
+        updateTomcatStatus(context, tomcat, deployment);
 
         return UpdateControl.noUpdate();
     }
