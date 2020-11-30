@@ -59,8 +59,8 @@ public class TomcatController implements ResourceController<Tomcat> {
         Optional<DeploymentEvent> latestDeploymentEvent = context.getEvents().getLatestOfType(DeploymentEvent.class);
         if (latestDeploymentEvent.isPresent()) {
             Tomcat updatedTomcat = updateTomcatStatus(tomcat, latestDeploymentEvent.get().getDeployment());
-            log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
-                    tomcat.getMetadata().getNamespace(), tomcat.getStatus().getReadyReplicas());
+            log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas (event list size = {})", tomcat.getMetadata().getName(),
+                    tomcat.getMetadata().getNamespace(), tomcat.getStatus().getReadyReplicas(), context.getEvents().getList().size());
             return UpdateControl.updateStatusSubResource(updatedTomcat);
         }
 

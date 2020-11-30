@@ -15,7 +15,7 @@ import static io.javaoperatorsdk.operator.processing.KubernetesResourceUtils.get
 import static java.net.HttpURLConnection.HTTP_GONE;
 
 public class DeploymentEventSource extends AbstractEventSource implements Watcher<Deployment> {
-    private final static Logger log = LoggerFactory.getLogger(CustomResourceEventSource.class);
+    private final static Logger log = LoggerFactory.getLogger(DeploymentEventSource.class);
 
     private final KubernetesClient client;
 
@@ -35,10 +35,10 @@ public class DeploymentEventSource extends AbstractEventSource implements Watche
 
     @Override
     public void eventReceived(Watcher.Action action, Deployment deployment) {
-        log.debug("Event received for action: {}, resource: {}", action.name(), deployment.getMetadata().getName());
+        log.info("Event received for action: {}, Deployment: {} (rr={})", action.name(), deployment.getMetadata().getName(), deployment.getStatus().getReadyReplicas());
 
         if (action == Action.ERROR) {
-            log.debug("Skipping {} event for custom resource uid: {}, version: {}", action,
+            log.warn("Skipping {} event for custom resource uid: {}, version: {}", action,
                     getUID(deployment), getVersion(deployment));
             return;
         }
