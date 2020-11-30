@@ -58,7 +58,10 @@ public class TomcatController implements ResourceController<Tomcat> {
 
         Optional<DeploymentEvent> latestDeploymentEvent = context.getEvents().getLatestOfType(DeploymentEvent.class);
         if (latestDeploymentEvent.isPresent()) {
-            updateTomcatStatus(tomcat, latestDeploymentEvent.get().getDeployment());
+            Tomcat updatedTomcat = updateTomcatStatus(tomcat, latestDeploymentEvent.get().getDeployment());
+            log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
+                    tomcat.getMetadata().getNamespace(), tomcat.getStatus().getReadyReplicas());
+            return UpdateControl.updateStatusSubResource(updatedTomcat);
         }
 
         return UpdateControl.noUpdate();
@@ -71,20 +74,13 @@ public class TomcatController implements ResourceController<Tomcat> {
         return DeleteControl.DEFAULT_DELETE;
     }
 
-    private void updateTomcatStatus(Tomcat tomcat, Deployment deployment) {
+    private Tomcat updateTomcatStatus(Tomcat tomcat, Deployment deployment) {
         DeploymentStatus deploymentStatus = Objects.requireNonNullElse(deployment.getStatus(), new DeploymentStatus());
         int readyReplicas = Objects.requireNonNullElse(deploymentStatus.getReadyReplicas(), 0);
-        log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
-                tomcat.getMetadata().getNamespace(), readyReplicas);
-
         TomcatStatus status = new TomcatStatus();
         status.setReadyReplicas(readyReplicas);
         tomcat.setStatus(status);
-
-        tomcatOperations
-                .inNamespace(tomcat.getMetadata().getNamespace())
-                .withName(tomcat.getMetadata().getName())
-                .updateStatus(tomcat);
+        return tomcat;
     }
 
     private void createOrUpdateDeployment(Tomcat tomcat) {
