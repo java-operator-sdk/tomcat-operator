@@ -5,14 +5,15 @@ import io.fabric8.kubernetes.client.Watcher;
 import io.javaoperatorsdk.operator.processing.KubernetesResourceUtils;
 import io.javaoperatorsdk.operator.processing.event.AbstractEvent;
 
-public class DeploymentEvent extends AbstractEvent<DeploymentEventSource> {
+public class DeploymentEvent extends AbstractEvent {
 
     private final Watcher.Action action;
     private final Deployment deployment;
 
     public DeploymentEvent(Watcher.Action action, Deployment resource,
                            DeploymentEventSource deploymentEventSource) {
-        super(KubernetesResourceUtils.getUID(resource), deploymentEventSource);
+        //TODO: this mapping is really critical and should be made more explicit
+        super(resource.getMetadata().getOwnerReferences().get(0).getUid(), deploymentEventSource);
         this.action = action;
         this.deployment = resource;
     }

@@ -4,6 +4,12 @@ metadata:
   name: ""
   labels:
     created-by: ""
+    managed-by: ""
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: Tomcat
+      name: ""
+      uid: ""
 spec:
   selector:
     matchLabels:

@@ -1,32 +1,31 @@
 package io.javaoperatorsdk.tomcatoperator;
 
-import io.javaoperatorsdk.operator.api.*;
 import io.fabric8.kubernetes.api.model.DoneableService;
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.api.model.apps.DoneableDeployment;
-import io.fabric8.kubernetes.client.*;
+import io.fabric8.kubernetes.client.CustomResourceDoneable;
+import io.fabric8.kubernetes.client.CustomResourceList;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.RollableScalableResource;
 import io.fabric8.kubernetes.client.dsl.ServiceResource;
 import io.fabric8.kubernetes.client.utils.Serialization;
-import io.javaoperatorsdk.operator.processing.event.EventHandler;
-import io.javaoperatorsdk.operator.processing.event.EventSource;
+import io.javaoperatorsdk.operator.api.*;
 import io.javaoperatorsdk.operator.processing.event.EventSourceManager;
-import io.javaoperatorsdk.operator.processing.event.ExecutionDescriptor;
+import io.javaoperatorsdk.operator.processing.event.internal.CustomResourceEvent;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
-import java.util.function.Supplier;
+import java.util.Optional;
 
 @Controller(crdName = "tomcats.tomcatoperator.io")
 public class TomcatController implements ResourceController<Tomcat> {
@@ -37,11 +36,42 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     private MixedOperation<Tomcat, CustomResourceList<Tomcat>, CustomResourceDoneable<Tomcat>, Resource<Tomcat, CustomResourceDoneable<Tomcat>>> tomcatOperations;
 
+    private DeploymentEventSource deploymentEventSource;
+
     public TomcatController(KubernetesClient client) {
         this.kubernetesClient = client;
     }
 
-    private void updateTomcatStatus(Context<Tomcat> context, Tomcat tomcat, Deployment deployment) {
+    @Override
+    public void init(EventSourceManager eventSourceManager) {
+        this.deploymentEventSource = DeploymentEventSource.createAndRegisterWatch(kubernetesClient);
+        eventSourceManager.registerEventSource("deployment-event-source", this.deploymentEventSource);
+    }
+
+    @Override
+    public UpdateControl<Tomcat> createOrUpdateResource(Tomcat tomcat, Context<Tomcat> context) {
+        Optional<CustomResourceEvent> latestCREvent = context.getEvents().getLatestOfType(CustomResourceEvent.class);
+        if (latestCREvent.isPresent()) {
+            createOrUpdateDeployment(tomcat);
+            createOrUpdateService(tomcat);
+        }
+
+        Optional<DeploymentEvent> latestDeploymentEvent = context.getEvents().getLatestOfType(DeploymentEvent.class);
+        if (latestDeploymentEvent.isPresent()) {
+            updateTomcatStatus(tomcat, latestDeploymentEvent.get().getDeployment());
+        }
+
+        return UpdateControl.noUpdate();
+    }
+
+    @Override
+    public DeleteControl deleteResource(Tomcat tomcat, Context<Tomcat> context) {
+        deleteDeployment(tomcat);
+        deleteService(tomcat);
+        return DeleteControl.DEFAULT_DELETE;
+    }
+
+    private void updateTomcatStatus(Tomcat tomcat, Deployment deployment) {
         DeploymentStatus deploymentStatus = Objects.requireNonNullElse(deployment.getStatus(), new DeploymentStatus());
         int readyReplicas = Objects.requireNonNullElse(deploymentStatus.getReadyReplicas(), 0);
         log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas", tomcat.getMetadata().getName(),
@@ -57,26 +87,7 @@ public class TomcatController implements ResourceController<Tomcat> {
                 .updateStatus(tomcat);
     }
 
-    @Override
-    public UpdateControl<Tomcat> createOrUpdateResource(Tomcat tomcat, Context<Tomcat> context) {
-        context.getEventSourceManager().registerEventSourceIfNotRegistered(tomcat, "deployment-event-source",
-                () -> DeploymentEventSource.createAndRegisterWatch(kubernetesClient));
-
-        Deployment deployment = createOrUpdateDeployment(tomcat);
-        createOrUpdateService(tomcat);
-        updateTomcatStatus(context, tomcat, deployment);
-
-        return UpdateControl.noUpdate();
-    }
-
-    @Override
-    public DeleteControl deleteResource(Tomcat tomcat, Context<Tomcat> context) {
-        deleteDeployment(tomcat);
-        deleteService(tomcat);
-        return DeleteControl.DEFAULT_DELETE;
-    }
-
-    private Deployment createOrUpdateDeployment(Tomcat tomcat) {
+    private void createOrUpdateDeployment(Tomcat tomcat) {
         String ns = tomcat.getMetadata().getNamespace();
         Deployment existingDeployment = kubernetesClient.apps().deployments()
                 .inNamespace(ns).withName(tomcat.getMetadata().getName())
@@ -86,6 +97,7 @@ public class TomcatController implements ResourceController<Tomcat> {
             deployment.getMetadata().setName(tomcat.getMetadata().getName());
             deployment.getMetadata().setNamespace(ns);
             deployment.getMetadata().getLabels().put("created-by", tomcat.getMetadata().getName());
+            deployment.getMetadata().getLabels().put("managed-by", "tomcat-operator");
             // set tomcat version
             deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
             deployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
@@ -94,12 +106,16 @@ public class TomcatController implements ResourceController<Tomcat> {
             deployment.getSpec().getTemplate().getMetadata().getLabels().put("app", tomcat.getMetadata().getName());
             deployment.getSpec().getSelector().getMatchLabels().put("app", tomcat.getMetadata().getName());
 
+            OwnerReference ownerReference = deployment.getMetadata().getOwnerReferences().get(0);
+            ownerReference.setName(tomcat.getMetadata().getName());
+            ownerReference.setUid(tomcat.getMetadata().getUid());
+
             log.info("Creating or updating Deployment {} in {}", deployment.getMetadata().getName(), ns);
-            return kubernetesClient.apps().deployments().inNamespace(ns).create(deployment);
+            kubernetesClient.apps().deployments().inNamespace(ns).create(deployment);
         } else {
             existingDeployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
             existingDeployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
-            return kubernetesClient.apps().deployments().inNamespace(ns).createOrReplace(existingDeployment);
+            kubernetesClient.apps().deployments().inNamespace(ns).createOrReplace(existingDeployment);
         }
     }
 
