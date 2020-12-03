@@ -32,13 +32,14 @@ import static io.javaoperatorsdk.operator.processing.KubernetesResourceUtils.get
 @Controller(crdName = "tomcats.tomcatoperator.io")
 public class TomcatController implements ResourceController<Tomcat> {
 
+    public static final String TOMCAT_IMAGE_PREFIX = "tomcat:";
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final KubernetesClient kubernetesClient;
 
     private MixedOperation<Tomcat, CustomResourceList<Tomcat>, CustomResourceDoneable<Tomcat>, Resource<Tomcat, CustomResourceDoneable<Tomcat>>> tomcatOperations;
 
-    private DeploymentEventSource deploymentEventSource;
+    private volatile DeploymentEventSource deploymentEventSource;
 
     public TomcatController(KubernetesClient client) {
         this.kubernetesClient = client;
@@ -52,16 +53,14 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     @Override
     public UpdateControl<Tomcat> createOrUpdateResource(Tomcat tomcat, Context<Tomcat> context) {
-        Deployment deployment;
 
-        Optional<CustomResourceEvent> latestCREvent = context.getEvents().getLatestOfType(CustomResourceEvent.class);
-        // This means the spec is changes, its already an optimization that we check the event. We could just always
-        // execute create objects.
-        if (latestCREvent.isPresent()) {
+        Optional<Deployment> cachedDeployment = deploymentEventSource.getLatestDeployment(getUID(tomcat));
+        Deployment deployment;
+        if (cachedDeployment.isEmpty() || !isDeploymentAccordingToTomcat(tomcat,cachedDeployment.get())) {
             deployment = createOrUpdateDeployment(tomcat);
             createOrUpdateService(tomcat);
         } else {
-            deployment = deploymentEventSource.getLatestDeployment(getUID(tomcat)).get();
+            deployment = cachedDeployment.get();
         }
 
         Tomcat updatedTomcat = updateTomcatStatus(tomcat, deployment);
@@ -69,6 +68,16 @@ public class TomcatController implements ResourceController<Tomcat> {
         log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas (event list size = {})", tomcat.getMetadata().getName(),
                 tomcat.getMetadata().getNamespace(), tomcat.getStatus().getReadyReplicas(), context.getEvents().getList().size());
         return UpdateControl.updateStatusSubResource(updatedTomcat);
+
+    }
+
+    private boolean isDeploymentAccordingToTomcat(Tomcat tomcat, Deployment deployment) {
+        DeploymentStatus deploymentStatus = Objects.requireNonNullElse(deployment.getStatus(), new DeploymentStatus());
+        Integer imageVersion =
+                Integer.parseInt(deployment.getSpec().getTemplate().getSpec()
+                        .getContainers().get(0).getImage().replace(TOMCAT_IMAGE_PREFIX,""));
+        return tomcat.getSpec().getReplicas().equals(Objects.requireNonNullElse(deploymentStatus.getReadyReplicas(), 0))
+                && tomcat.getSpec().getVersion().equals(imageVersion);
 
     }
 
@@ -100,7 +109,7 @@ public class TomcatController implements ResourceController<Tomcat> {
             deployment.getMetadata().getLabels().put("created-by", tomcat.getMetadata().getName());
             deployment.getMetadata().getLabels().put("managed-by", "tomcat-operator");
             // set tomcat version
-            deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
+            deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage(TOMCAT_IMAGE_PREFIX + tomcat.getSpec().getVersion());
             deployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
 
             //make sure label selector matches label (which has to be matched by service selector too)
