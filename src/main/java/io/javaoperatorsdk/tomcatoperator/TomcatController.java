@@ -27,16 +27,19 @@ import java.io.InputStream;
 import java.util.Objects;
 import java.util.Optional;
 
+import static io.javaoperatorsdk.operator.processing.KubernetesResourceUtils.getUID;
+
 @Controller(crdName = "tomcats.tomcatoperator.io")
 public class TomcatController implements ResourceController<Tomcat> {
 
+    public static final String TOMCAT_IMAGE_PREFIX = "tomcat:";
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final KubernetesClient kubernetesClient;
 
     private MixedOperation<Tomcat, CustomResourceList<Tomcat>, CustomResourceDoneable<Tomcat>, Resource<Tomcat, CustomResourceDoneable<Tomcat>>> tomcatOperations;
 
-    private DeploymentEventSource deploymentEventSource;
+    private volatile DeploymentEventSource deploymentEventSource;
 
     public TomcatController(KubernetesClient client) {
         this.kubernetesClient = client;
@@ -50,21 +53,32 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     @Override
     public UpdateControl<Tomcat> createOrUpdateResource(Tomcat tomcat, Context<Tomcat> context) {
-        Optional<CustomResourceEvent> latestCREvent = context.getEvents().getLatestOfType(CustomResourceEvent.class);
-        if (latestCREvent.isPresent()) {
-            createOrUpdateDeployment(tomcat);
+
+        Optional<Deployment> cachedDeployment = deploymentEventSource.getLatestDeployment(getUID(tomcat));
+        Deployment deployment;
+        if (cachedDeployment.isEmpty() || !isDeploymentAccordingToTomcat(tomcat,cachedDeployment.get())) {
+            deployment = createOrUpdateDeployment(tomcat);
             createOrUpdateService(tomcat);
+        } else {
+            deployment = cachedDeployment.get();
         }
 
-        Optional<DeploymentEvent> latestDeploymentEvent = context.getEvents().getLatestOfType(DeploymentEvent.class);
-        if (latestDeploymentEvent.isPresent()) {
-            Tomcat updatedTomcat = updateTomcatStatus(tomcat, latestDeploymentEvent.get().getDeployment());
-            log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas (event list size = {})", tomcat.getMetadata().getName(),
-                    tomcat.getMetadata().getNamespace(), tomcat.getStatus().getReadyReplicas(), context.getEvents().getList().size());
-            return UpdateControl.updateStatusSubResource(updatedTomcat);
-        }
+        Tomcat updatedTomcat = updateTomcatStatus(tomcat, deployment);
 
-        return UpdateControl.noUpdate();
+        log.info("Updating status of Tomcat {} in namespace {} to {} ready replicas (event list size = {})", tomcat.getMetadata().getName(),
+                tomcat.getMetadata().getNamespace(), tomcat.getStatus().getReadyReplicas(), context.getEvents().getList().size());
+        return UpdateControl.updateStatusSubResource(updatedTomcat);
+
+    }
+
+    private boolean isDeploymentAccordingToTomcat(Tomcat tomcat, Deployment deployment) {
+        DeploymentStatus deploymentStatus = Objects.requireNonNullElse(deployment.getStatus(), new DeploymentStatus());
+        Integer imageVersion =
+                Integer.parseInt(deployment.getSpec().getTemplate().getSpec()
+                        .getContainers().get(0).getImage().replace(TOMCAT_IMAGE_PREFIX,""));
+        return tomcat.getSpec().getReplicas().equals(Objects.requireNonNullElse(deploymentStatus.getReadyReplicas(), 0))
+                && tomcat.getSpec().getVersion().equals(imageVersion);
+
     }
 
     @Override
@@ -83,7 +97,7 @@ public class TomcatController implements ResourceController<Tomcat> {
         return tomcat;
     }
 
-    private void createOrUpdateDeployment(Tomcat tomcat) {
+    private Deployment createOrUpdateDeployment(Tomcat tomcat) {
         String ns = tomcat.getMetadata().getNamespace();
         Deployment existingDeployment = kubernetesClient.apps().deployments()
                 .inNamespace(ns).withName(tomcat.getMetadata().getName())
@@ -95,7 +109,7 @@ public class TomcatController implements ResourceController<Tomcat> {
             deployment.getMetadata().getLabels().put("created-by", tomcat.getMetadata().getName());
             deployment.getMetadata().getLabels().put("managed-by", "tomcat-operator");
             // set tomcat version
-            deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
+            deployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage(TOMCAT_IMAGE_PREFIX + tomcat.getSpec().getVersion());
             deployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
 
             //make sure label selector matches label (which has to be matched by service selector too)
@@ -107,11 +121,11 @@ public class TomcatController implements ResourceController<Tomcat> {
             ownerReference.setUid(tomcat.getMetadata().getUid());
 
             log.info("Creating or updating Deployment {} in {}", deployment.getMetadata().getName(), ns);
-            kubernetesClient.apps().deployments().inNamespace(ns).create(deployment);
+            return kubernetesClient.apps().deployments().inNamespace(ns).create(deployment);
         } else {
             existingDeployment.getSpec().getTemplate().getSpec().getContainers().get(0).setImage("tomcat:" + tomcat.getSpec().getVersion());
             existingDeployment.getSpec().setReplicas(tomcat.getSpec().getReplicas());
-            kubernetesClient.apps().deployments().inNamespace(ns).createOrReplace(existingDeployment);
+            return kubernetesClient.apps().deployments().inNamespace(ns).createOrReplace(existingDeployment);
         }
     }
 
@@ -125,14 +139,14 @@ public class TomcatController implements ResourceController<Tomcat> {
         }
     }
 
-    private void createOrUpdateService(Tomcat tomcat) {
+    private Service createOrUpdateService(Tomcat tomcat) {
         Service service = loadYaml(Service.class, "service.yaml");
         service.getMetadata().setName(tomcat.getMetadata().getName());
         String ns = tomcat.getMetadata().getNamespace();
         service.getMetadata().setNamespace(ns);
         service.getSpec().getSelector().put("app", tomcat.getMetadata().getName());
         log.info("Creating or updating Service {} in {}", service.getMetadata().getName(), ns);
-        kubernetesClient.services().inNamespace(ns).createOrReplace(service);
+        return kubernetesClient.services().inNamespace(ns).createOrReplace(service);
     }
 
     private void deleteService(Tomcat tomcat) {
