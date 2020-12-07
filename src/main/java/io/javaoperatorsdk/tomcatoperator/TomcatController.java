@@ -94,16 +94,6 @@ public class TomcatController implements ResourceController<Tomcat> {
     }
 
 
-    private void deleteDeployment(Tomcat tomcat) {
-        log.info("Deleting Deployment {}", tomcat.getMetadata().getName());
-        RollableScalableResource<Deployment, DoneableDeployment> deployment = kubernetesClient.apps().deployments()
-                .inNamespace(tomcat.getMetadata().getNamespace())
-                .withName(tomcat.getMetadata().getName());
-        if (deployment.get() != null) {
-            deployment.delete();
-        }
-    }
-
     private Service createOrUpdateService(Tomcat tomcat) {
         Service service = loadYaml(Service.class, "service.yaml");
         service.getMetadata().setName(tomcat.getMetadata().getName());
@@ -134,46 +124,5 @@ public class TomcatController implements ResourceController<Tomcat> {
 
     public void setTomcatOperations(MixedOperation<Tomcat, CustomResourceList<Tomcat>, CustomResourceDoneable<Tomcat>, Resource<Tomcat, CustomResourceDoneable<Tomcat>>> tomcatOperations) {
         this.tomcatOperations = tomcatOperations;
-    }
-
-    private static class WatchedResource {
-        private final String type;
-        private final String name;
-
-        public WatchedResource(String type, String name) {
-            this.type = type;
-            this.name = name;
-        }
-
-        public static WatchedResource fromResource(HasMetadata resource) {
-            return new WatchedResource(resource.getKind(), resource.getMetadata().getName());
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-
-            if (o == null || getClass() != o.getClass()) return false;
-
-            WatchedResource that = (WatchedResource) o;
-
-            return new EqualsBuilder()
-                    .append(type, that.type)
-                    .append(name, that.name)
-                    .isEquals();
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(type, name);
-        }
-
-        @Override
-        public String toString() {
-            return "WatchedResource{" +
-                    "type='" + type + '\'' +
-                    ", name='" + name + '\'' +
-                    '}';
-        }
     }
 }
